@@ -1,0 +1,133 @@
+---
+title: "Stat240Proj"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE, error = TRUE,
+                      fig.height = 3)
+library(tidyverse)
+```
+
+#Introduction
+
+Urbanization and population growth are two defining trends of modern society.
+As cities expand, demographic patterns,such as the balance between male and female residents, may change due to differences in migration, employment, and cultural factors.
+Research Question:
+Does city size which measured by total population affect the gender composition in cities worldwide, specifically the proportion of males and females?
+To answer this, we use official United Nations city-level population data and compare the average proportion of females between large and small cities using statistical inference.
+
+#Data Description
+
+The data come from the United Nations Department of Economic and Social Affairs (UN DESA) “World Urbanization Prospects” dataset.
+The dataset provides estimated city populations by sex and year, based on census and survey data.
+
+We use two files:
+unsd-citypopulation-year-fm.csv: contains male and female population counts for each city and year
+unsd-citypopulation-year-both.csv: contains total population counts for each city and year
+ Variable Descriptions
+ 
+ 
+| Variable | Description |
+|-----------|-------------|
+| **City**  | City name |
+| **Year**  | Year of observation |
+| **Sex**   | “Male” or “Female” |
+| **Value** | Population count |
+
+ 
+We focus on 2020, the most recent year with complete data.
+
+```{r}
+
+both <- read_csv("unsd-citypopulation-year-both.csv")
+fm <- read_csv("unsd-citypopulation-year-fm.csv")
+
+
+both_2020 <- both %>% filter(Year == 2020)
+fm_2020 <- fm %>% filter(Year == 2020)
+
+
+fm_wide <- fm_2020 %>%
+  pivot_wider(names_from = Sex, values_from = Value) %>%
+  rename(male = Male, female = Female)
+
+
+city_data <- fm_wide %>%
+  left_join(both_2020 %>% select(City, Value), by = "City") %>%
+  rename(total = Value)
+
+city_data <- city_data %>%
+  mutate(female_prop = female / total,
+         size_group = ifelse(total > median(total, na.rm = TRUE),
+                             "Large City", "Small/Medium City"))
+
+city_data <- city_data %>% drop_na(female_prop)
+
+glimpse(city_data)
+```
+
+#Exploratory Visualization
+We first visualize how the female proportion differs between large and small cities.
+The boxplot compares the proportion of female residents between large and smaller cities.
+We can observe whether large cities generally have higher or lower female representation.
+```{r}
+ggplot(city_data, aes(x = size_group, y = female_prop, fill = size_group)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red") +
+  labs(title = "Female Population Proportion by City Size (2020)",
+       x = "City Size Group", y = "Proportion of Females") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+#Statistical Analysis
+We test whether there is a statistically significant difference in average female proportion between large and small cities.
+
+Hypotheses:
+	H0: μ_large = μ_small
+(The average proportion of females is the same in large and small cities.)
+	Ha: μ_large ≠ μ_small
+(The average proportion of females differs between large and small cities.)
+We perform a two-sample t-test for comparing two population means 
+```{r}
+t_result <- t.test(female_prop ~ size_group, data = city_data, var.equal = FALSE)
+t_result
+```
+The p-value from the test indicates whether there is evidence of a difference in female proportions between city sizes.
+If p < 0.05, we reject H₀ and conclude that city size has a statistically significant association with gender composition.
+
+We use the median city population as the cutoff to define “large” and “small/medium” cities. 
+This ensures that the two groups have similar sample sizes, which improves the reliability of the t-test.
+
+We can also build a 95% confidence interval for the difference in mean proportions:
+```{r}
+t_result$conf.int
+
+```
+
+
+Summary of Key Results
+
+
+| Group | Mean Female Proportion | n | t-statistic | p-value | 95% CI |
+|-------|------------------------|---|--------------|---------|--------|
+| Large Cities | 0.531 | ≈ 1,400 | -2.46 | 0.0138 | (-0.181, -0.021) |
+| Small/Medium Cities | 0.632 | ≈ 1,400 |  |  |  |
+
+
+
+#Conclusion
+```
+Based on the Welch two-sample t-test, there is a **statistically significant difference** 
+in the average proportion of females between large and small/medium cities (t = -2.46, p = 0.0138).  
+The 95% confidence interval for the difference in means (Large City – Small/Medium City) is (-0.181, -0.021) which does not include zero.  
+
+This indicates that **small and medium-sized cities tend to have a higher proportion of females** compared to large cities.  
+In other words, as city size increases, the proportion of female residents tends to decrease slightly.  
+
+These results suggest that urbanization and migration patterns might contribute to a mild gender imbalance in larger cities, 
+potentially due to differences in employment opportunities, mobility, or other socioeconomic factors.  
+However, the difference is moderate, so while statistically significant, it may not represent a large practical effect.
+```
